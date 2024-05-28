@@ -1,0 +1,94 @@
+{
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Arial', sans-serif;
+}
+
+body {
+    background-color: #00b3b3;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+.container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+}
+
+.profile-card {
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    text-align: center;
+    width: 300px;
+}
+
+.profile-img {
+    border-radius: 50%;
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    margin-top: -50px;
+    border: 5px solid white;
+}
+
+h4 {
+    font-size: 0.875rem;
+    margin: 10px 0;
+    font-family: sans-serif;
+}
+
+h4 span {
+    color: gray;
+    font-size: 0.875rem;
+}
+
+p {
+    margin-bottom: 20px;
+}
+
+.stats {
+    display: flex;
+    justify-content: space-between;
+    border-top: 1px solid #e0e0e0;
+    padding-top: 10px;
+    margin-left:10px;
+    margin-right:10px;
+    font-size: 1 rem;
+    font-family: sans-serif;
+
+
+}
+.stats  p span
+{
+    color:gray;
+    font-size: 0.75rem;
+
+}
+.stats div {
+    text-align: center;
+    font-size: 0.875rem;
+
+}
+
+.stats div p:first-child {
+    font-weight: bold;
+    font-size:0.876rem;
+}
+
+@media (max-width: 600px) {
+    .profile-card {
+        width: 80%;
+    }
+
+    .stats {
+        display:flex;
+        gap: 10px;
+    }
+}

@@ -1,0 +1,5 @@
+create home page
+semantic tags example
+frontend challenge
+google analytics
+jsonld

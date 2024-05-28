@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TASK-2</title>
+    <style>
+        body {
+    
+
+            font-family: Arial, sans-serif;
+            background-color: cornflowerblue;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .card {
+            background-color: #fff;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .card img {
+            width: 100%;
+            height: auto;
+            object-fit: cover;
+        }
+        .card-content {
+            padding: 20px;
+        }
+        .card-content h2 {
+            font-size: 1.25rem;
+            margin: 0 0 10px;
+        }
+        .card-content p {
+            font-size: 0.875rem;
+            color: #555;
+            margin: 0 0 20px;
+        }
+        .card-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .card-footer .author {
+            display: flex;
+            align-items: center;
+        }
+        .card-footer .author img {
+                        display: flex;
+
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            margin-right: 10px;
+
+        }
+        .card-footer .author div {
+            font-size: 0.875rem;
+            color: #555;
+        }
+        .card-footer .author div span {
+            display: block;
+            color: #aaa;
+        }
+        .card-footer .share-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .card-footer .share-icon img {
+            width: 30px;
+            height: 20px;
+            
+        }
+        /* Media Query for wider screens */
+        @media (min-width: 600px) {
+            .card {
+                flex-direction: row;
+            }
+            .card img {
+                width: 40%;
+                height: auto;
+            }
+            .card-content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <img src="C:\Users\Asus\Documents\aenal\internship\summer_internship_2024\task2\drawers.jpg" alt="Decorative Image">
+    <div class="card-content">
+        <h2>Shift the overall look and feel by adding these wonderful touches to furniture in your home</h2>
+        <p>Ever been in a room and felt like something was missing? Perhaps it felt slightly bare and uninviting. I've got some simple tips to help you make any room feel complete.</p>
+        <div class="card-footer">
+            <div class="author">
+                <img src="C:\Users\Asus\Documents\aenal\internship\summer_internship_2024\task2\aenu.jpg" alt="Author Image">
+                <div>
+                    Aenal Patani
+                    <span>18 May 2024</span>
+                </div>
+            </div>
+            <div class="share-icon">
+                <img src="C:\Users\Asus\Documents\aenal\internship\summer_internship_2024\task2\share.jpg" alt="Share Icon">
+            </div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

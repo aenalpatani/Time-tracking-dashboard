@@ -1,0 +1,528 @@
+﻿/*******************************************************
+ * Copyright (C) 2017 Zakeke
+ *
+ * This file is part of Zakeke.
+ *
+ * Zakeke can not be copied and/or distributed without the express
+ * permission of Zakeke
+  *******************************************************/
+function zakekeDesigner(config, product) {
+
+    var apiBaseUrl = Zakeke.config.baseApiUrl.replace('/api/', '/');
+    var zakekeUrl = Zakeke.config.baseUrl;
+    var container = document.getElementById('zakeke-container');
+    var iframe = document.createElement('iframe');
+
+    var productInfoCache = {};
+    var productInfoPendingRequests = [];
+
+    // ----------- Functions
+
+    var setUrlIframe = function () {
+        var httpRequest = new XMLHttpRequest();
+
+        httpRequest.open("POST", apiBaseUrl + 'v1/iframe');
+        httpRequest.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+        httpRequest.setRequestHeader("Authorization", "bearer " + config.tokenoauth);
+
+        httpRequest.send(JSON.stringify(
+            {
+                tokenoauth: config.tokenoauth,
+                mobileversion: config.mobileversion,
+                productid: product.id,
+                loadTemplateId: config.loadtemplateid,
+                name: product.name,
+                quantity: config.quantity,
+                currency: config.currency,
+                culture: config.culture,
+                designid: config.designid,
+                cartbuttontext: config.cartbuttontext,
+                labeltax: config.labeltax,
+                attributes: config.selectedattributes || {},
+                previewAttributes: config.previewAttributes || [],
+                productSides: config.sides || [],
+                managedshare: config.managedsharecallback != null,
+                hidevariants: config.hidevariants != null ? config.hidevariants : false,
+                imagepreviewheight: config.imagepreviewheight || 200,
+                imagepreviewwidth: config.imagepreviewwidth || 200,
+                canEnableNamesAndNumbers: config.canenablenamesandnumbers,
+                isClientPreviewsEnabled: config.isclientpreviewsenabled,
+                enableShareDesignUrl: config.enableShareDesignUrl != null ? config.enableShareDesignUrl : false,
+                shareUrlPrefix: config.shareUrlPrefix,
+                canEnableMultipleVariations: config.canenablemultiplevariations,
+                isBulkAsNNSupported: config.canenablebulkindividualfile,
+                canSaveDesign: config.canSaveDesign
+
+            }));
+
+
+        httpRequest.onreadystatechange = function () {
+            if (httpRequest.readyState === XMLHttpRequest.DONE) {
+                if (httpRequest.status === 200) {
+                    iframe.src = JSON.parse(httpRequest.responseText).url;
+                }
+                else
+                    throw new Error("Error requesting url iframe. Status: " + httpRequest.status + " Response body: " + httpRequest.responseText);
+            }
+        }
+    };
+
+    var matchVariant = function (color) {
+        if (product.variants) {
+            var userattributes = getUserAttributes(color);
+
+            return product.variants.find(function (v) {
+                return Object.keys(v.attributes).every(function (k) {
+                    return v.attributes[k] === userattributes[k];
+                });
+            }) || product;
+        }
+        else {
+            return product;
+        }
+    };
+
+    var isInStock = function (variant) {
+        var inventorymanagement = config.inventorymanagement !== undefined ? config.inventorymanagement : true;
+        var inventorypolicy = config.inventorypolicy !== undefined ? config.inventorypolicy : 'deny';
+
+        return !inventorymanagement
+            || inventorypolicy === 'continue'
+            || variant.stockquantity >= config.quantity;
+    };
+
+
+
+    var calculatePrice = function (variant, zakekePercentPrice, zakekePrice) {
+        var finalPrice = priceTierVariant(variant);
+
+        if (zakekePercentPrice) {
+            finalPrice += finalPrice * (zakekePercentPrice / 100);
+        }
+
+        if (zakekePrice) {
+            finalPrice += zakekePrice;
+        }
+
+        finalPrice *= config.quantity;
+        return calculateTax(finalPrice);
+    };
+
+    var calculateTax = function (price) {
+        var priceTaxIncluded = config.pricetaxincluded !== undefined ? config.pricetaxincluded : true;
+        var iframepricetaxincludent = config.iframepricetaxincludent !== undefined ? config.iframepricetaxincludent : true;
+        var taxrate = config.taxrate !== undefined ? config.taxrate : 0;
+
+        if (priceTaxIncluded == iframepricetaxincludent)
+            return price;
+
+        if (priceTaxIncluded && !iframepricetaxincludent)
+            return (price / ((100 + config.taxrate) / 100));
+
+        if (!priceTaxIncluded && iframepricetaxincludent)
+            return ((100 + config.taxrate) * price) / 100;
+
+        return price;
+    };
+
+    var productData = function (color, zakekeOptions) {
+        var variant = matchVariant(JSON.parse(color));
+        iframe.contentWindow.postMessage({
+            data: {
+                color: color,
+                isOutOfStock: !isInStock(variant),
+                finalPrice: currencyConverter(calculatePrice(variant, zakekeOptions['zakeke-percent-price'], zakekeOptions['zakeke-price']))
+            },
+            zakekeMessageType: 'DesignChange'
+        }, '*');
+    };
+
+    var getSharedDesignUrl = function (data) {
+        return fetch(config.shareddesignurl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", },
+            body: JSON.stringify( { designID: data.designID }),
+        })
+            .then(res => res.json())
+            .then(res => {
+                const url = res.url;
+
+                iframe.contentWindow.postMessage({
+                    data: {
+                        promiseId: data.promiseId,
+                        url
+                    },
+                    zakekeMessageType: 'SharedDesign'
+                }, '*');
+            })
+    }
+
+    var productPriceUrl = function (data) {
+        return fetch(config.productspriceurl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", },
+            body: JSON.stringify(data), 
+        })
+            .then(res => res.json())
+            .then(res => {
+                const finalPrice = res.price * data.quantity;
+                const isOutOfStock = res.isoutofstock;
+
+                iframe.contentWindow.postMessage({
+                    data: {
+                        promiseId: data.promiseId,
+                        isOutOfStock,
+                        finalPrice
+                    },
+                    zakekeMessageType: 'ProductPrice'
+                }, '*');
+            });
+    };
+
+    var productAttribute = function (data) {
+        return fetch(config.productattributeurl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", },
+            body: JSON.stringify(),
+        })
+            .then(res => res.json())
+            .then(res => {
+                const attributes = res.attributes.map(attribute => ({
+                    id: attribute.code,
+                    label: attribute.label,
+                    values: attribute.values.map(value => ({
+                        id: value.code,
+                        label: value.label
+                    }))
+                }));
+                const variants = res.variants.map(selection => selection.map(variant => ({
+                    Id: variant.code,
+                    Value: {
+                        Id: variant.value.code
+                    }
+                })));
+                iframe.contentWindow.postMessage({
+                    data: Object.assign({}, data, {
+                        attributes,
+                        variants
+                    }),
+                    zakekeMessageType: 'ProductAttributes'
+                }, '*');
+            });
+    };
+
+    var addToCartMultipleVariant = function (data) {
+        var httpRequest = new XMLHttpRequest();
+        if (config.shoppingcartbulkcallback) {
+            config.shoppingcartbulkcallback(data);
+            return;
+        } else {
+            httpRequest.open("POST", config.shoppingcartbulkurl);
+        }
+        httpRequest.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+        httpRequest.onreadystatechange = function () {
+            if (httpRequest.readyState === XMLHttpRequest.DONE) {
+                if (httpRequest.status === 200) {
+                    var respose = JSON.parse(httpRequest.responseText);
+                    window.location.href = respose.returnurl;
+                }
+                else
+                    throw new Error("An error occourred during product info request. Status: " + httpRequest.status + " Response body: " + httpRequest.responseText);
+            }
+        }
+        httpRequest.send(JSON.stringify(data));
+    }
+
+    var addToCartNameAndNumber = function (data) {
+        var httpRequest = new XMLHttpRequest();
+        if (config.designid != undefined && config.designid !== '') {
+            if (config.editshoppingcartnameandnumbercallback) {
+                config.editshoppingcartnameandnumbercallback(data);
+                return;
+            }
+            else
+                httpRequest.open("POST", config.editshoppingcartnameandnumberurl);
+        } else {
+
+            if (config.shoppingcartnameandnumbercallback) {
+                config.shoppingcartnameandnumbercallback(data);
+                return;
+            }
+            else {
+                httpRequest.open("POST", config.shoppingcartnameandnumberurl);
+            }
+        }
+        httpRequest.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+        httpRequest.onreadystatechange = function () {
+            if (httpRequest.readyState === XMLHttpRequest.DONE) {
+                if (httpRequest.status === 200) {
+                    var respose = JSON.parse(httpRequest.responseText);
+                    window.location.href = respose.returnurl;
+                }
+                else
+                    throw new Error("An error occourred during product info request. Status: " + httpRequest.status + " Response body: " + httpRequest.responseText);
+            }
+        }
+        httpRequest.send(JSON.stringify(data));
+    }
+
+    var addToCart = function (designID, colorId, quantity) {
+
+        var color = JSON.parse(colorId);
+        var userattributes = getUserAttributes(color);
+
+        var requestCartEP = {
+            productid: product.id,
+            quantity: quantity,
+            designid: designID,
+            selectedattributes: userattributes,
+            additionaldata: config.additionaldata
+        };
+
+        var httpRequest = new XMLHttpRequest();
+        if (config.designid != undefined && config.designid !== '') {
+
+            if (config.editshoppingcartcallback) {
+                config.editshoppingcartcallback(requestCartEP);
+                return;
+            }
+            else
+                httpRequest.open("POST", config.editshoppingcarturl);
+        }
+        else {
+            if (config.shoppingcarturlcallback) {
+                config.shoppingcarturlcallback(requestCartEP);
+                return;
+            }
+            else if (config.shoppingcartcallback) {
+                config.shoppingcartcallback(requestCartEP);
+                return;
+            }
+            else
+                httpRequest.open("POST", config.shoppingcarturl);
+        }
+
+        httpRequest.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+        httpRequest.onreadystatechange = function () {
+            if (httpRequest.readyState === XMLHttpRequest.DONE) {
+                if (httpRequest.status === 200) {
+                    var respose = JSON.parse(httpRequest.responseText);
+                    window.location.href = respose.returnurl;
+                }
+                else
+                    throw new Error("An error occourred during product info request. Status: " + httpRequest.status + " Response body: " + httpRequest.responseText);
+            }
+        }
+        httpRequest.send(JSON.stringify(requestCartEP));
+    };
+
+    var getProductEndPoint = function (design) {
+        var userattributes = getUserAttributes(JSON.parse(design.color));
+
+        const requestBody = JSON.stringify(
+            {
+                productid: product.id,
+                quantity: config.quantity,
+                selectedattributes: userattributes,
+                zakekeprice: design.price,
+                zakekepercentageprice: design.percentPrice,
+                conditions: design.conditions,
+                additionaldata: config.additionaldata
+            }
+        );
+        if (productInfoPendingRequests.includes(requestBody)) {
+            return;
+        }
+
+        if (productInfoCache[requestBody]) {
+            iframe.contentWindow.postMessage(productInfoCache[requestBody], '*');
+            return;
+        }
+
+        productInfoPendingRequests.push(requestBody);
+
+        var httpRequest = new XMLHttpRequest();
+        httpRequest.open("POST", config.productinfourl);
+        httpRequest.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+        httpRequest.send(requestBody);
+
+        httpRequest.onreadystatechange = function () {
+            if (httpRequest.readyState === XMLHttpRequest.DONE) {
+                if (httpRequest.status === 200) {
+                    var respEP = JSON.parse(httpRequest.responseText);
+
+                    const response = {
+                        data: {
+                            zakekeprice: respEP.price,
+                            zakekepercentageprice: respEP.percentprice,
+                            quantity: respEP.quantity,
+                            finalPrice: respEP.finalprice
+                        },
+                        zakekeMessageType: 'DesignChange'
+                    };
+
+                    iframe.contentWindow.postMessage(response, '*');
+
+                    productInfoCache[requestBody] = response;
+                    productInfoPendingRequests = productInfoPendingRequests.filter(function (el) {
+                        return el !== requestBody;
+                    });
+                }
+                else
+                    throw new Error("An error occourred during product info request. Status: " + httpRequest.status + " Response body: " + httpRequest.responseText);
+            }
+        }
+    };
+    var addToCartBulkAsNN = function(data){
+        var httpRequest = new XMLHttpRequest();
+        if (config.shoppingcartbulkindividualfilecallback) {
+            config.shoppingcartbulkindividualfilecallback(data);
+            return;
+        }
+        else {
+            httpRequest.open("POST", config.shoppingcartbulkindividualfileurl);
+        }
+        httpRequest.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+        httpRequest.onreadystatechange = function () {
+            if (httpRequest.readyState === XMLHttpRequest.DONE) {
+                if (httpRequest.status === 200) {
+                    var respose = JSON.parse(httpRequest.responseText);
+                    window.location.href = respose.returnurl;
+                }
+                else
+                    throw new Error("An error occourred during product info request. Status: " + httpRequest.status + " Response body: " + httpRequest.responseText);
+            }
+        }
+        httpRequest.send(JSON.stringify(data));
+    }
+
+    // ------------ Utility functions
+
+    var currencyConverter = function (price) {
+        if (config.basecurrency === config.currency)
+            return price;
+
+        return price * config.exchangerate;
+    };
+
+    var priceTierVariant = function (variant) {
+        if (variant.pricetier) {
+
+            variant.pricetier.sort(function (pricetier1, pricetier2) {
+                return (pricetier1.quantity - pricetier2.quantity);
+            });
+
+            var selectedPricetier = variant.pricetier.filter(function (pricetier) {
+                return (config.quantity >= pricetier.quantity);
+            }).pop();
+
+            if (selectedPricetier)
+                return selectedPricetier.price;
+        }
+        return variant.price;
+    };
+
+    var getUserAttributes = function (color) {
+        var userattributes = {};
+        Object.keys(config.selectedattributes).forEach(
+            function (k) {
+                userattributes[k] = config.selectedattributes[k];
+            }
+        );
+        color.forEach(function (c) {
+            userattributes[c.Id] = c.Value.Id;
+        });
+
+        return userattributes;
+    };
+
+    var eventHandler = function (event) {
+        if (event.origin !== zakekeUrl.slice(0, zakekeUrl.length - 1)) {
+            return;
+        }
+        if (event.data.zakekeMessageType === 'AddToCart') {
+            addToCart(event.data.designId, event.data.colorId, config.quantity);
+        } else if (event.data.zakekeMessageType === 'AddToCartNameAndNumber') {
+            addToCartNameAndNumber(event.data.data);
+        } else if (event.data.zakekeMessageType === 'AddToCartMultiple') {
+            addToCartMultipleVariant(event.data.data);
+        } else if (event.data.zakekeMessageType === 'onBackClicked') {
+            if (config.onbackclickedcallback == undefined) {
+                const isFirefox = navigator.userAgent.indexOf("Firefox") != -1;
+                if (isFirefox) {
+                    window.history.go(-1);
+                } else {
+                    window.history.back();
+                }
+            } else {
+                config.onbackclickedcallback();
+            }
+        }
+        else if (event.data.zakekeMessageType === 'DesignChange') {
+            if (config.productinfourl == undefined) {
+                productData(event.data.design.color, {
+                    'zakeke-price': event.data.design.price || 1000,
+                    'zakeke-percent-price': event.data.design.percentPrice || 1000
+                })
+            } else {
+                getProductEndPoint(event.data.design);
+            }
+        } else if (event.data.zakekeMessageType === 'Share') {
+            if (config.managedsharecallback) {
+                config.managedsharecallback(event.data.url);
+            }
+        } else if(event.data.zakekeMessageType === 'AddToCartBulkAsNN'){
+            addToCartBulkAsNN(event.data.data);
+        }else if (event.data.zakekeMessageType === "SharedDesign") {
+            if (config.shareddesigncallback) {
+                config.shareddesigncallback(event.data.data.designID);
+            } else {
+                getSharedDesignUrl(event.data.data);
+            }
+        } else if (event.data.zakekeMessageType === 'SaveDesign') {
+            if (config.savedesigncallback) {
+                config.savedesigncallback(
+                    {
+                        'designid': event.data.designId
+                    });
+            }
+        } else if (event.data.zakekeMessageType === 'ProductPrice') {
+            if (!config.productspriceurl && !config.productspricecallback) {
+                iframe.contentWindow.postMessage({
+                    data: {
+                        promiseId: event.data.data.promiseId,
+                        finalPrice : 0
+                    },
+                    zakekeMessageType: 'ProductPrice'
+                }, '*');
+            } else if(config.productspriceurl == undefined){      
+                config.productspricecallback(event.data.data);
+            } else
+                productPriceUrl(event.data.data);
+        } else if (event.data.zakekeMessageType === 'ProductAttributes') {
+            if (config.productattributeurl == undefined) {
+                config.productattributecallback(event.data.data);
+            } else {
+                productAttribute(event.data.data);
+            }
+        }
+    }
+
+    var removeIframe = function () {
+        window.removeEventListener('message', eventHandler);
+        iframe.remove();
+    };
+
+    // ------------ Event handlers
+    window.addEventListener('message', eventHandler, false);
+
+    // ------------ Iframe intialization
+    iframe.scrolling = false;
+    iframe.frameBorder = 0;
+    iframe.allow = "web-share";
+    container.appendChild(iframe);
+    setUrlIframe();
+
+    // ----
+    return { removeIframe: removeIframe }
+}
